@@ -1,5 +1,47 @@
 use std::fmt::{Debug, Error, Formatter};
+use std::hash::Hash;
 use std::mem;
+use std::ops::{BitAnd, BitOr, Not};
+
+use itertools::Itertools;
+use num_traits::{PrimInt, Zero};
+
+pub trait BitSet: Eq + PartialEq + Ord + PartialOrd + Hash +
+Copy + Clone + Debug +
+BitOr<Output=Self> + BitAnd<Output=Self> + Not<Output=Self> + Zero
+{
+    fn size() -> usize;
+
+    fn get(&self, index: usize) -> bool;
+    fn set(&mut self, index: usize, value: bool);
+
+    fn all_set(&self, mask: Self) -> bool {
+        *self & mask == mask
+    }
+
+    fn all_ones(&self) -> bool {
+        *self == !Self::zero()
+    }
+}
+
+impl<T: PrimInt + Hash + Debug> BitSet for T {
+    fn size() -> usize {
+        Self::zero().count_zeros() as usize
+    }
+
+    fn get(&self, index: usize) -> bool {
+        (*self >> index) & T::one() != T::zero()
+    }
+
+    fn set(&mut self, index: usize, value: bool) {
+        let mask: T = T::one() << index;
+        if value {
+            *self = *self | mask;
+        } else {
+            *self = *self & !mask;
+        }
+    }
+}
 
 /**
 Represents multiple states of a signal at once.
@@ -15,22 +57,23 @@ All possible cases:
 * high impedance: low=0, high=0, strong=0
 
 */
-#[derive(Copy, Clone, Hash, Eq, PartialEq, Ord, PartialOrd)]
 //TODO figure out a way to include the mask in this,
 // so we can ignore meaningless bits without passing a mask around
 // make sure this plays nicely with pmos, nmos, connect and equals
-pub struct Signal {
-    low: u8,
-    high: u8,
-    strong: u8,
+#[derive(Copy, Clone, Hash, Eq, PartialEq, Ord, PartialOrd)]
+pub struct Signal<B: BitSet> {
+    low: B,
+    high: B,
+    strong: B,
 }
 
-impl Signal {
-    pub fn from_str(s: &str) -> Signal {
-        assert!(s.len() <= 8 * mem::size_of::<u8>());
+impl<B: BitSet> Signal<B> {
+    pub fn from_str(s: &str) -> Signal<B> {
+        let mut result = Signal { low: !B::zero(), high: !B::zero(), strong: !B::zero() };
 
-        let mut result = Signal { low: 0, high: 0, strong: 0 };
         for (i, c) in s.chars().rev().enumerate() {
+            assert!(i <= B::size(), "string too large for bitset type");
+
             let (low, high, strong) = match c {
                 '0' => (true, false, true),
                 '1' => (false, true, true),
@@ -40,30 +83,32 @@ impl Signal {
                 c => panic!("Unexpected character '{}'", c)
             };
 
-            result.low |= (low as u8) << (i as u8);
-            result.high |= (high as u8) << (i as u8);
-            result.strong |= (strong as u8) << (i as u8);
-
+            result.low.set(i, low);
+            result.high.set(i, high);
+            result.strong.set(i, strong);
         }
+
         result
     }
 
-    pub fn new_strong(high: u8, strong: u8) -> Signal {
-        Signal::new(!high & strong, high, strong)
-    }
-
-    pub fn new(low: u8, high: u8, strong: u8) -> Signal {
-        debug_assert!(low & high == 0,
-                      "Signal cannot be both low and high");
-        debug_assert!(strong & (low | high) == strong,
-                      "strong Signal must be either high or low");
+    pub fn new(low: B, high: B, strong: B) -> Signal<B> {
+        debug_assert!(low & high & !strong == B::zero(), "illegal combination 110");
+        debug_assert!(!low & !high & strong == B::zero(), "illegal combination");
 
         Signal { low, high, strong }
     }
 
-    pub fn connect(a: Signal, b: Signal) -> Option<Signal> {
-        if a.low & b.high != 0 { return None; };
-        if a.high & b.low != 0 { return None; };
+    pub fn connect(a: Signal<B>, b: Signal<B>) -> Option<Signal<B>> {
+        let result = Signal::connect_wrap(a, b);
+//        println!("Connecting {:?} and {:?} gives {:?}", a, b, result);
+        result
+    }
+
+    fn connect_wrap(a: Signal<B>, b: Signal<B>) -> Option<Signal<B>> {
+        let ignore = a.high & a.low & a.strong;
+
+        if a.low & b.high != ignore { return None; };
+        if a.high & b.low != ignore { return None; };
 
         Some(Signal::new(
             a.low | b.low,
@@ -72,77 +117,94 @@ impl Signal {
         ))
     }
 
-    pub fn pmos(gate: Signal, drain: Signal, mask: u8) -> Option<Signal> {
-        if gate.strong & mask != mask {
-            None
-        } else {
+    pub fn pmos(gate: Signal<B>, drain: Signal<B>) -> Option<Signal<B>> {
+        if gate.strong.all_ones() {
             Some(Signal::new(
                 gate.low & drain.low,
                 gate.low & drain.high,
                 gate.low & drain.high & drain.strong,
             ))
+        } else {
+            None
         }
     }
 
-    pub fn nmos(gate: Signal, drain: Signal, mask: u8) -> Option<Signal> {
-        if gate.strong & mask != mask {
-            None
-        } else {
+    pub fn nmos(gate: Signal<B>, drain: Signal<B>) -> Option<Signal<B>> {
+        if gate.strong.all_ones() {
             Some(Signal::new(
                 gate.high & drain.low,
                 gate.high & drain.high,
                 gate.high & drain.low & drain.strong,
             ))
+        } else {
+            None
         }
     }
 
-    pub fn equals(self: Signal, other: Signal, mask: u8) -> bool {
-        (self.low & mask == other.low & mask) &&
-            (self.high & mask == other.high & mask) &&
-            (self.strong & mask == other.strong & mask)
+    pub fn ignored_mask(&self) -> B {
+        self.low & self.high & self.strong
     }
 }
 
-impl Debug for Signal {
-    fn fmt(&self, f: &mut Formatter<'_>) -> Result<(), Error> {
-        write!(f, "[")?;
-        for i in (0..8 * mem::size_of::<u8>()).rev() {
-            let mask = (1 << i) as u8;
-            let char = match (self.low & mask != 0, self.high & mask != 0, self.strong & mask != 0) {
-                (true, false, true) => '0',
-                (false, true, true) => '1',
-                (true, false, false) => '↓',
-                (false, true, false) => '↑',
-                (false, false, false) => 'Z',
-                _ => 'E',
-            };
-            write!(f, "{}", char)?;
+impl<B: BitSet> Debug for Signal<B> {
+    fn fmt(&self, f: &mut Formatter) -> Result<(), Error> {
+        if f.alternate() {
+            f.debug_struct("Signal")
+                .field("low", &self.low)
+                .field("high", &self.high)
+                .field("strong", &self.strong)
+                .finish()?
+        } else {
+            write!(f, "[")?;
+            for index in (0..8 * mem::size_of::<B>()).rev() {
+                let char = match (self.low.get(index), self.high.get(index), self.strong.get(index)) {
+                    (true, false, true) => '0',
+                    (false, true, true) => '1',
+                    (true, false, false) => '↓',
+                    (false, true, false) => '↑',
+                    (false, false, false) => 'Z',
+                    (true, true, true) => '.', //masked
+                    _ => 'E',
+                };
+                write!(f, "{}", char)?;
+            }
+            write!(f, "]")?;
         }
-        write!(f, "]")?;
         Ok(())
     }
 }
 
 #[derive(Debug)]
-pub struct CareSignal {
-    pub signal: Signal,
-    pub care: u8,
+pub struct CareSignal<B: BitSet> {
+    pub signal: Signal<B>,
+    pub care: B,
 }
 
-impl CareSignal {
-    pub fn new(signal: Signal, care: u8) -> CareSignal {
+impl<B: BitSet> CareSignal<B> {
+    pub fn new(signal: Signal<B>, care: B) -> CareSignal<B> {
         CareSignal { signal, care }
     }
 }
 
-pub struct Query<'a> {
-    //mask for the relevant inputs
-    pub mask: u8,
-
+pub struct Query<'a, B: BitSet> {
     //signals allowed to be used as drains
-    pub power: &'a [Signal],
+    pub power: &'a [Signal<B>],
     //signals allowed to be used as gates
-    pub inputs: &'a [Signal],
+    pub inputs: &'a [Signal<B>],
 
-    pub outputs: &'a [CareSignal],
+    //expected outputs
+    pub outputs: &'a [CareSignal<B>],
+}
+
+impl<'a, B: BitSet> Query<'a, B> {
+    pub fn check(&self) {
+        debug_assert!(
+            self.power.iter()
+                .chain(self.inputs.iter())
+                .chain(self.outputs.iter().map(|cs| &cs.signal))
+                .map(|&s| s.ignored_mask())
+                .all_equal(),
+            "All signals must have the same ignored mask"
+        );
+    }
 }

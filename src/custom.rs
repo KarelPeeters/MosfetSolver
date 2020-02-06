@@ -1,6 +1,6 @@
 use smallset::SmallSet;
-use crate::signal::{Signal, CareSignal, Query};
 
+use crate::signal::{CareSignal, Query, Signal, BitSet};
 
 /*
 TODO:
@@ -14,12 +14,11 @@ try to alternate adding pmos and nmos, solutions probably have a ratio around 50
 
 */
 
-pub(crate) fn find_solution(query: &Query, max_gates: usize) {
+fn find_solution<B: BitSet>(query: &Query<B>, max_gates: usize) {
     let mut state = State {
         power_signals: SmallSet::new(),
         gate_signals: SmallSet::new(),
         free_signals: SmallSet::new(),
-        mask: query.mask,
         outputs: query.outputs,
         max_gates,
     };
@@ -42,25 +41,23 @@ pub(crate) fn find_solution(query: &Query, max_gates: usize) {
 }
 
 #[derive(Debug)]
-struct State<'a> {
-    mask: u8,
+struct State<'a, B: BitSet> {
+    power_signals: SmallSet<[Signal<B>; 10]>,
+    gate_signals: SmallSet<[Signal<B>; 10]>,
+    free_signals: SmallSet<[Signal<B>; 10]>,
 
-    power_signals: SmallSet<[Signal; 10]>,
-    gate_signals: SmallSet<[Signal; 10]>,
-    free_signals: SmallSet<[Signal; 10]>,
-
-    outputs: &'a [CareSignal],
+    outputs: &'a [CareSignal<B>],
     max_gates: usize,
 }
 
-impl<'a> State<'a> {
+impl<'a, B: BitSet> State<'a, B> {
     fn recurse(&mut self, i: usize) {
         self.check_solution();
         if i == self.max_gates { return; }
 
-        let power_signals: Vec<Signal> = self.power_signals.iter().copied().collect();
-        let gate_signals: Vec<Signal> = self.gate_signals.iter().copied().collect();
-        let free_signals: Vec<Signal> = self.free_signals.iter().copied().collect();
+        let power_signals: Vec<Signal<B>> = self.power_signals.iter().copied().collect();
+        let gate_signals: Vec<Signal<B>> = self.gate_signals.iter().copied().collect();
+        let free_signals: Vec<Signal<B>> = self.free_signals.iter().copied().collect();
 
         for power in power_signals.iter().copied() {
 //            println!("{:-<2$}Picking power {:?}", "", power, i);
@@ -99,11 +96,11 @@ impl<'a> State<'a> {
 
                 //alternate order of attempting pmos/nmos
                 if i % 2 == 0 {
-                    self.add_device(Signal::pmos(gate, power, self.mask), &free_signals, i);
-                    self.add_device(Signal::nmos(gate, power, self.mask), &free_signals, i);
+                    self.add_device(Signal::pmos(gate, power), &free_signals, i);
+                    self.add_device(Signal::nmos(gate, power), &free_signals, i);
                 } else {
-                    self.add_device(Signal::nmos(gate, power, self.mask), &free_signals, i);
-                    self.add_device(Signal::pmos(gate, power, self.mask), &free_signals, i);
+                    self.add_device(Signal::nmos(gate, power), &free_signals, i);
+                    self.add_device(Signal::pmos(gate, power), &free_signals, i);
                 }
 
                 if gate_was_free {
@@ -137,7 +134,7 @@ impl<'a> State<'a> {
         println!("Found solution, {:?}", self);
     }
 
-    fn add_device(&mut self, result: Option<Signal>, free_signals: &Vec<Signal>, i: usize) {
+    fn add_device(&mut self, result: Option<Signal<B>>, free_signals: &Vec<Signal<B>>, i: usize) {
         if let Some(new) = result {
             //add as new free signal
             self.add_as_free(new, i);
@@ -156,7 +153,7 @@ impl<'a> State<'a> {
         }
     }
 
-    fn add_as_free(&mut self, new: Signal, i: usize) {
+    fn add_as_free(&mut self, new: Signal<B>, i: usize) {
         if self.free_signals.insert(new) {
             let power_is_new = self.power_signals.insert(new);
             let gate_is_new = self.gate_signals.insert(new);
@@ -170,7 +167,7 @@ impl<'a> State<'a> {
     }
 }
 
-pub fn main_custom(query: &Query, max_gates: usize) {
+pub fn main_custom<B: BitSet>(query: &Query<B>, max_gates: usize) {
     let result = find_solution(&query, max_gates);
     println!("{:?}", result);
 }

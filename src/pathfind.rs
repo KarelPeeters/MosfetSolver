@@ -1,9 +1,9 @@
 use std::collections::BTreeSet;
 
-use itertools::Itertools;
 use pathfinding::prelude::bfs;
 
-use crate::signal::{CareSignal, Query, Signal};
+use crate::signal::{BitSet, CareSignal, Query, Signal};
+use itertools::Itertools;
 
 #[derive(Eq, PartialEq, Hash, Copy, Clone, Debug)]
 enum Kind {
@@ -12,28 +12,28 @@ enum Kind {
 }
 
 #[derive(Eq, PartialEq, Hash, Copy, Clone, Debug)]
-struct Device {
+struct Device<B: BitSet> {
     kind: Kind,
-    gate: Signal,
-    power: Signal,
+    gate: Signal<B>,
+    power: Signal<B>,
 }
 
 #[derive(Eq, PartialEq, Hash, Clone, Debug)]
-struct Pos {
-    power_signals: BTreeSet<Signal>,
-    gate_signals: BTreeSet<Signal>,
-    free_signals: BTreeSet<Signal>,
+struct Pos<B: BitSet> {
+    power_signals: BTreeSet<Signal<B>>,
+    gate_signals: BTreeSet<Signal<B>>,
+    free_signals: BTreeSet<Signal<B>>,
     gates_left: usize,
 }
 
-impl Pos {
-    fn clone_for_next(&self) -> Pos {
+impl<B: BitSet> Pos<B> {
+    fn clone_for_next(&self) -> Pos<B> {
         let mut result = self.clone();
         result.gates_left -= 1;
         result
     }
 
-    fn successors(&self, mask: u8) -> Vec<Pos> {
+    fn successors(&self) -> Vec<Pos<B>> {
         let mut result = Vec::new();
 
         if self.gates_left == 0 { return result; };
@@ -44,27 +44,18 @@ impl Pos {
                 next.free_signals.remove(&power);
                 next.free_signals.remove(&gate);
 
-                next.add_device(Device { kind: Kind::PMOS, gate, power },
-                                Signal::pmos(gate, power, mask),
-                                &mut result);
-                next.add_device(Device { kind: Kind::NMOS, gate, power },
-                                Signal::nmos(gate, power, mask),
-                                &mut result);
+                next.add_device(Signal::pmos(gate, power), &mut result);
+                next.add_device(Signal::nmos(gate, power), &mut result);
             }
         }
 
         result
     }
 
-    fn add_device(&self, device: Device, output: Option<Signal>, result: &mut Vec<Pos>) {
+    fn add_device(&self, output: Option<Signal<B>>, result: &mut Vec<Pos<B>>) {
         if let Some(output) = output {
-            if output == Signal::from_str("111Z") {
-                println!("Got {:?} at {:?}", output, self);
-            }
-
             //add as free
-            let mut next = self.clone();
-            next.add_as_free(output, result);
+            self.add_as_free(output, result);
 
             //merge with other frees
             for &other in &self.free_signals {
@@ -79,7 +70,7 @@ impl Pos {
         }
     }
 
-    fn add_as_free(&self, new: Signal, result: &mut Vec<Pos>) {
+    fn add_as_free(&self, new: Signal<B>, result: &mut Vec<Pos<B>>) {
         if !self.free_signals.contains(&new) {
             let mut next = self.clone_for_next();
             next.free_signals.insert(new);
@@ -90,13 +81,14 @@ impl Pos {
     }
 }
 
-pub fn main_pathfind(query: &Query, max_gates: usize) {
-    let pos = Pos {
+pub fn main_pathfind<B: BitSet>(query: &Query<B>, max_gates: usize) {
+    query.check();
+    /*let pos: Pos<u8> = Pos {
         power_signals: vec![Signal::from_str("1Z1Z"), Signal::from_str("1111"), Signal::from_str("0000")].iter().copied().collect(),
         gate_signals: vec![Signal::from_str("1Z1Z"), Signal::from_str("0101"), Signal::from_str("0011")].iter().copied().collect(),
         free_signals: vec![Signal::from_str("1Z1Z")].iter().copied().collect(),
         gates_left: 5,
-    };
+    };*/
 
 //    println!("Parent: {:?}", pos);
 //    println!("Successors:\n{}", pos.successors(0b1111).iter().map(|p| format!("{:?}", p)).join("\n"));
@@ -109,19 +101,15 @@ pub fn main_pathfind(query: &Query, max_gates: usize) {
         gates_left: max_gates,
     };
 
-    let done = |p: &Pos| -> bool {
+    let done = |p: &Pos<B>| -> bool {
+        println!("Looking at {:?}", p);
+        //TODO use care again!
         query.outputs.iter().all(|&CareSignal { care, signal }|
-            if care == query.mask {
-                p.power_signals
-                    .contains(&signal)
-            } else {
-                p.power_signals.iter()
-                    .any(|s| s.equals(signal, care))
-            }
+            p.power_signals.contains(&signal)
         )
     };
 
-    let result = bfs(&start, |p| p.successors(query.mask), done);
+    let result = bfs(&start, Pos::successors, done);
 
     match result {
         None => {
@@ -129,7 +117,7 @@ pub fn main_pathfind(query: &Query, max_gates: usize) {
         }
         Some(solution) => {
             println!("Found solution, device count: {}", solution.len() - 1);
-//            println!("{}", solution.iter().map(|p| format!("{:?}", p)).join("\n"));
+            println!("{}", solution.iter().map(|p| format!("{:?}", p)).join("\n"));
         }
     }
 }
