@@ -1,11 +1,12 @@
 use std::collections::{BTreeMap, BTreeSet, HashSet};
+use std::mem::swap;
 use std::time::{Duration, Instant};
 
+use fnv::FnvHashSet;
 use itertools::Itertools;
 use pathfinding::prelude::bfs;
 
 use crate::signal::{BitSet, Query, Signal};
-use std::mem::swap;
 
 static mut SUCCESSOR_TIME: Duration = Duration::from_secs(0);
 static mut DONE_TIME: Duration = Duration::from_secs(0);
@@ -26,16 +27,20 @@ struct Device<B: BitSet> {
     power: Signal<B>,
 }
 
-#[derive(Eq, PartialEq, Hash, Debug)]
+#[derive(Eq, PartialEq, Hash, Debug, Ord, PartialOrd)]
+//TODO
 struct Pos<B: BitSet> {
+    //TODO remove with new bfs algorithm
     gates_left: usize,
 
+    //TODO exclude these from hash, they're always going to be the same anyway
+    //  is it possible to remove these from Pos entirely?
     power_cands: Vec<Signal<B>>,
     gate_cands: Vec<Signal<B>>,
 
+    //TODO try different hash types, and just manually implement hash
     built_signals: BTreeMap<Signal<B>, bool>,
 }
-
 impl<B: BitSet> Clone for Pos<B> {
     fn clone(&self) -> Self {
         let start = Instant::now();
@@ -65,7 +70,8 @@ impl<B: BitSet> Pos<B> {
         result
     }
 
-    fn successors(&self) -> Vec<Pos<B>> {
+    //TODO maybe stop cloning here and mutate instead now that we get self by value anyways
+    fn successors(self) -> Vec<Pos<B>> {
         let start = Instant::now();
         let mut result = Vec::new();
 
@@ -88,6 +94,7 @@ impl<B: BitSet> Pos<B> {
         result
     }
 
+    //TODO try to avoid cloning so much here
     fn add_device(&self, output: Option<Signal<B>>, result: &mut Vec<Pos<B>>) {
         if let Some(output) = output {
             //add as free
@@ -107,6 +114,7 @@ impl<B: BitSet> Pos<B> {
         }
     }
 
+    //TODO this is the single place where cloning is ok, it should be removed from everything else
     fn add_as_free(&self, new: Signal<B>, result: &mut Vec<Pos<B>>) {
         let start = Instant::now();
 
@@ -162,17 +170,22 @@ pub fn main_pathfind<B: BitSet>(query: &Query<B>, max_gates: usize) -> Option<us
     };
 
     //TODO try to write our own bfs
-    let result = bfs(&start, Pos::successors, done);
+    let result = bfs2(&start, Pos::successors, done);
 
     let length = match &result {
         None => {
             println!("No solution found");
             None
         }
-        Some(solution) => {
-            println!("Found solution, device count: {}", solution.len() - 1);
-            println!("{}", solution.iter().map(|p| format!("{:?}", p)).join("\n"));
-            Some(solution.len() - 1)
+//        Some(solution) => {
+//            println!("Found solution, device count: {}", solution.len() - 1);
+//            println!("{}", solution.iter().map(|p| format!("{:?}", p)).join("\n"));
+//            Some(solution.len() - 1)
+//        }
+        Some((i, end)) => {
+            println!("Found solution, device count: {}", i);
+            println!("end: {:?}", end);
+            Some(*i)
         }
     };
 
@@ -183,4 +196,42 @@ pub fn main_pathfind<B: BitSet>(query: &Query<B>, max_gates: usize) -> Option<us
     println!("CLONE_TIME: {:?}", unsafe { CLONE_TIME });
 
     length
+}
+
+fn bfs2<
+    B: BitSet,
+    //TODO change signature to consuming Pos<B>, but match bfs signature for now
+    //  check if it's faster
+    FN: FnMut(Pos<B>) -> Vec<Pos<B>>,
+    FS: FnMut(&Pos<B>) -> bool,
+>(start: &Pos<B>, mut successors: FN, mut success: FS) -> Option<(usize, Pos<B>)> {
+    let mut curr: HashSet<Pos<B>> = Default::default();
+    curr.insert(start.clone());
+
+    //TODO break this loop based on index, but match signature to bfs for now
+    //  check if it's faster
+    //TODO remove upper bound
+    for i in 0..5 {
+        println!("Starting depth {}", i);
+
+        let mut next: HashSet<Pos<B>> = Default::default();
+
+        for pos in curr.into_iter() {
+            let succ = successors(pos);
+
+            for s in &succ {
+                success(s);
+                //TODO uncomment this, but for now we just want to search the entire tree
+//                if success(s) { return Some((i, pos)); }
+            }
+
+            next.extend(succ);
+        }
+
+        if next.is_empty() { return None; }
+        curr = next;
+    }
+
+    //TODO put unreachable again (or not?)
+    None
 }
