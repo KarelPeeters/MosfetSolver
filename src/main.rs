@@ -5,6 +5,9 @@ use std::time::Instant;
 use crate::pathfind::main_pathfind;
 use crate::signal::{CareSignal, Query, Signal};
 
+#[cfg(test)]
+mod test;
+
 mod signal;
 mod vec_set;
 mod bit;

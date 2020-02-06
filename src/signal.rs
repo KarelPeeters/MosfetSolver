@@ -1,7 +1,7 @@
 use std::fmt::{Debug, Error, Formatter};
 use std::hash::Hash;
 use std::mem;
-use std::ops::{BitAnd, BitOr, Not, BitXor};
+use std::ops::{BitAnd, BitOr, BitXor, Not};
 
 use itertools::Itertools;
 use num_traits::{PrimInt, Zero};
@@ -163,7 +163,7 @@ impl<B: BitSet> Debug for Signal<B> {
                     (true, false, false) => '↓',
                     (false, true, false) => '↑',
                     (false, false, false) => 'Z',
-                    (true, true, true) => '.', //masked
+                    (true, true, true) => continue, //masked
                     _ => 'E',
                 };
                 write!(f, "{}", char)?;
@@ -177,7 +177,7 @@ impl<B: BitSet> Debug for Signal<B> {
 #[derive(Debug)]
 pub struct CareSignal<B: BitSet> {
     pub signal: Signal<B>,
-    pub care: B
+    pub care: B,
 }
 
 impl<B: BitSet> CareSignal<B> {
@@ -187,8 +187,8 @@ impl<B: BitSet> CareSignal<B> {
 
     pub fn matches(&self, signal: Signal<B>) -> bool {
         (((self.signal.low ^ signal.low) & self.care) == B::zero()) &&
-        (((self.signal.high ^ signal.high) & self.care) == B::zero()) &&
-        (((self.signal.strong ^ signal.strong) & self.care) == B::zero())
+            (((self.signal.high ^ signal.high) & self.care) == B::zero()) &&
+            (((self.signal.strong ^ signal.strong) & self.care) == B::zero())
     }
 }
 
@@ -204,7 +204,7 @@ pub struct Query<'a, B: BitSet> {
 
 impl<'a, B: BitSet> Query<'a, B> {
     pub fn check(&self) {
-        debug_assert!(
+        assert!(
             self.power.iter()
                 .chain(self.inputs.iter())
                 .chain(self.outputs.iter().map(|cs| &cs.signal))
@@ -212,5 +212,7 @@ impl<'a, B: BitSet> Query<'a, B> {
                 .all_equal(),
             "All signals must have the same ignored mask"
         );
+
+        //TODO check that ouput cares are a subset of !ignored_mask()
     }
 }
