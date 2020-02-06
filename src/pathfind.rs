@@ -1,9 +1,16 @@
 use std::collections::BTreeSet;
+use std::time::{Duration, Instant};
 
 use itertools::Itertools;
 use pathfinding::prelude::bfs;
 
 use crate::signal::{BitSet, Query, Signal};
+
+static mut SUCCESSOR_TIME: Duration = Duration::from_secs(0);
+static mut DONE_TIME: Duration = Duration::from_secs(0);
+static mut ADD_AS_FREE_TIME: Duration = Duration::from_secs(0);
+static mut CLONE_FOR_NEXT_TIME: Duration = Duration::from_secs(0);
+static mut CLONE_TIME: Duration = Duration::from_secs(0);
 
 #[derive(Eq, PartialEq, Hash, Copy, Clone, Debug)]
 enum Kind {
@@ -18,7 +25,7 @@ struct Device<B: BitSet> {
     power: Signal<B>,
 }
 
-#[derive(Eq, PartialEq, Hash, Clone, Debug)]
+#[derive(Eq, PartialEq, Hash, Debug)]
 struct Pos<B: BitSet> {
     gates_left: usize,
 
@@ -29,14 +36,38 @@ struct Pos<B: BitSet> {
     free_signals: BTreeSet<Signal<B>>,
 }
 
+impl<B: BitSet> Clone for Pos<B> {
+    fn clone(&self) -> Self {
+        let start = Instant::now();
+        let result = Pos {
+            gates_left: self.gates_left,
+            power_cands: self.power_cands.clone(),
+            gate_cands: self.gate_cands.clone(),
+            common_cands: self.common_cands.clone(),
+            free_signals: self.free_signals.clone(),
+        };
+
+        let end = Instant::now();
+        unsafe { CLONE_TIME += end - start }
+        result
+    }
+}
+
 impl<B: BitSet> Pos<B> {
     fn clone_for_next(&self) -> Pos<B> {
+        let start = Instant::now();
+
         let mut result = self.clone();
         result.gates_left -= 1;
+
+        let end = Instant::now();
+        unsafe { CLONE_FOR_NEXT_TIME += end - start; }
+
         result
     }
 
     fn successors(&self) -> Vec<Pos<B>> {
+        let start = Instant::now();
         let mut result = Vec::new();
 
         if self.gates_left == 0 { return result; };
@@ -51,6 +82,8 @@ impl<B: BitSet> Pos<B> {
                 next.add_device(Signal::nmos(gate, power), &mut result);
             }
         }
+        let end = Instant::now();
+        unsafe { SUCCESSOR_TIME += end - start; }
 
         result
     }
@@ -76,12 +109,17 @@ impl<B: BitSet> Pos<B> {
     }
 
     fn add_as_free(&self, new: Signal<B>, result: &mut Vec<Pos<B>>) {
+        let start = Instant::now();
+
         if !self.free_signals.contains(&new) {
             let mut next = self.clone_for_next();
             next.free_signals.insert(new);
             next.common_cands.insert(new);
             result.push(next);
         }
+
+        let end = Instant::now();
+        unsafe { ADD_AS_FREE_TIME += end - start; }
     }
 }
 
@@ -114,13 +152,17 @@ pub fn main_pathfind<B: BitSet>(query: &Query<B>, max_gates: usize) -> Option<us
     };
 
     let done = |p: &Pos<B>| -> bool {
-        query.outputs.iter().all(|cs|
+        let start = Instant::now();
+        let result = query.outputs.iter().all(|cs|
             if cs.care == !ignore_mask {
                 p.common_cands.contains(&cs.signal)
             } else {
                 p.common_cands.iter().any(|&p| cs.matches(p))
             }
-        )
+        );
+        let end = Instant::now();
+        unsafe { DONE_TIME += end - start; }
+        result
     };
 
     let result = bfs(&start, Pos::successors, done);
@@ -134,6 +176,12 @@ pub fn main_pathfind<B: BitSet>(query: &Query<B>, max_gates: usize) -> Option<us
             println!("{}", solution.iter().map(|p| format!("{:?}", p)).join("\n"));
         }
     }
+
+    println!("SUCCESSORS_TIME: {:?}", unsafe { SUCCESSOR_TIME });
+    println!("DONE_TIME: {:?}", unsafe { DONE_TIME });
+    println!("ADD_AS_FREE_TIME: {:?}", unsafe { ADD_AS_FREE_TIME });
+    println!("CLONE_FOR_NEXT_TIME: {:?}", unsafe { CLONE_FOR_NEXT_TIME });
+    println!("CLONE_TIME: {:?}", unsafe { CLONE_TIME });
 
     result.map(|v| v.len() - 1)
 }

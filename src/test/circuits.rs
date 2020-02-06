@@ -141,3 +141,21 @@ fn test_nand3() {
 
     assert_eq!(main_pathfind(&query, 8), Some(6));
 }
+
+#[test]
+#[ignore]
+fn test_xor2() {
+    let query = Query::<u8> {
+        power: &[Signal::from_str("1111"), Signal::from_str("0000")],
+        inputs: &[
+            Signal::from_str("0011"),
+            Signal::from_str("0101"),
+        ],
+        outputs: &[CareSignal::new(
+            Signal::from_str("0110"),
+            0b1111,
+        )],
+    };
+
+    assert_eq!(main_pathfind(&query, 10), Some(6));
+}

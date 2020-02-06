@@ -7,9 +7,15 @@ edition = "2018"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-fnv = "1.0.6"
-smallset = "0.1.1"
+#fnv = "1.0.6"
+#smallset = "0.1.1"
 pathfinding = "2.0.3"
 itertools = "0.8.2"
-more-asserts = "0.2.1"
+#more-asserts = "0.2.1"
 num-traits = "0.2.11"
+
+[profile.release]
+opt-level=3
+
+[build]
+rustflags = ["-Clink-args=/PROFILE"]
