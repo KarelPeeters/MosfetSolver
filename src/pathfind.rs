@@ -1,9 +1,9 @@
 use std::collections::BTreeSet;
 
+use itertools::Itertools;
 use pathfinding::prelude::bfs;
 
-use crate::signal::{BitSet, CareSignal, Query, Signal};
-use itertools::Itertools;
+use crate::signal::{BitSet, Query, Signal};
 
 #[derive(Eq, PartialEq, Hash, Copy, Clone, Debug)]
 enum Kind {
@@ -83,6 +83,11 @@ impl<B: BitSet> Pos<B> {
 
 pub fn main_pathfind<B: BitSet>(query: &Query<B>, max_gates: usize) {
     query.check();
+
+    //to use for done check, if there are no outputs the mask doesn't matter
+    let ignore_mask = query.outputs
+        .first().map_or(B::zero(), |cs| cs.signal.ignored_mask());
+
     /*let pos: Pos<u8> = Pos {
         power_signals: vec![Signal::from_str("1Z1Z"), Signal::from_str("1111"), Signal::from_str("0000")].iter().copied().collect(),
         gate_signals: vec![Signal::from_str("1Z1Z"), Signal::from_str("0101"), Signal::from_str("0011")].iter().copied().collect(),
@@ -102,10 +107,12 @@ pub fn main_pathfind<B: BitSet>(query: &Query<B>, max_gates: usize) {
     };
 
     let done = |p: &Pos<B>| -> bool {
-        println!("Looking at {:?}", p);
-        //TODO use care again!
-        query.outputs.iter().all(|&CareSignal { care, signal }|
-            p.power_signals.contains(&signal)
+        query.outputs.iter().all(|cs|
+            if cs.care == !ignore_mask {
+                p.power_signals.contains(&cs.signal)
+            } else {
+                p.power_signals.iter().any(|&p| cs.matches(p))
+            }
         )
     };
 

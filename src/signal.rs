@@ -1,14 +1,14 @@
 use std::fmt::{Debug, Error, Formatter};
 use std::hash::Hash;
 use std::mem;
-use std::ops::{BitAnd, BitOr, Not};
+use std::ops::{BitAnd, BitOr, Not, BitXor};
 
 use itertools::Itertools;
 use num_traits::{PrimInt, Zero};
 
 pub trait BitSet: Eq + PartialEq + Ord + PartialOrd + Hash +
 Copy + Clone + Debug +
-BitOr<Output=Self> + BitAnd<Output=Self> + Not<Output=Self> + Zero
+BitOr<Output=Self> + BitAnd<Output=Self> + BitXor<Output=Self> + Not<Output=Self> + Zero
 {
     fn size() -> usize;
 
@@ -71,7 +71,7 @@ impl<B: BitSet> Signal<B> {
     pub fn from_str(s: &str) -> Signal<B> {
         let mut result = Signal { low: !B::zero(), high: !B::zero(), strong: !B::zero() };
 
-        for (i, c) in s.chars().rev().enumerate() {
+        for (i, c) in s.chars().rev().filter(|&c| c != '_').enumerate() {
             assert!(i <= B::size(), "string too large for bitset type");
 
             let (low, high, strong) = match c {
@@ -177,12 +177,18 @@ impl<B: BitSet> Debug for Signal<B> {
 #[derive(Debug)]
 pub struct CareSignal<B: BitSet> {
     pub signal: Signal<B>,
-    pub care: B,
+    pub care: B
 }
 
 impl<B: BitSet> CareSignal<B> {
     pub fn new(signal: Signal<B>, care: B) -> CareSignal<B> {
         CareSignal { signal, care }
+    }
+
+    pub fn matches(&self, signal: Signal<B>) -> bool {
+        (((self.signal.low ^ signal.low) & self.care) == B::zero()) &&
+        (((self.signal.high ^ signal.high) & self.care) == B::zero()) &&
+        (((self.signal.strong ^ signal.strong) & self.care) == B::zero())
     }
 }
 
