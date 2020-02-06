@@ -1,10 +1,11 @@
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet, HashSet};
 use std::time::{Duration, Instant};
 
 use itertools::Itertools;
 use pathfinding::prelude::bfs;
 
 use crate::signal::{BitSet, Query, Signal};
+use std::mem::swap;
 
 static mut SUCCESSOR_TIME: Duration = Duration::from_secs(0);
 static mut DONE_TIME: Duration = Duration::from_secs(0);
@@ -29,11 +30,10 @@ struct Device<B: BitSet> {
 struct Pos<B: BitSet> {
     gates_left: usize,
 
-    power_cands: BTreeSet<Signal<B>>,
-    gate_cands: BTreeSet<Signal<B>>,
-    common_cands: BTreeSet<Signal<B>>,
+    power_cands: Vec<Signal<B>>,
+    gate_cands: Vec<Signal<B>>,
 
-    free_signals: BTreeSet<Signal<B>>,
+    built_signals: BTreeMap<Signal<B>, bool>,
 }
 
 impl<B: BitSet> Clone for Pos<B> {
@@ -43,8 +43,7 @@ impl<B: BitSet> Clone for Pos<B> {
             gates_left: self.gates_left,
             power_cands: self.power_cands.clone(),
             gate_cands: self.gate_cands.clone(),
-            common_cands: self.common_cands.clone(),
-            free_signals: self.free_signals.clone(),
+            built_signals: self.built_signals.clone(),
         };
 
         let end = Instant::now();
@@ -72,11 +71,12 @@ impl<B: BitSet> Pos<B> {
 
         if self.gates_left == 0 { return result; };
 
-        for &power in self.power_cands.iter().chain(self.common_cands.iter()) {
-            for &gate in self.gate_cands.iter().chain(self.common_cands.iter()) {
+        for &power in self.power_cands.iter().chain(self.built_signals.keys()) {
+            for &gate in self.gate_cands.iter().chain(self.built_signals.keys()) {
                 let mut next = self.clone();
-                next.free_signals.remove(&power);
-                next.free_signals.remove(&gate);
+
+                next.built_signals.entry(power).and_modify(|v| *v = false);
+                next.built_signals.entry(gate).and_modify(|v| *v = false);
 
                 next.add_device(Signal::pmos(gate, power), &mut result);
                 next.add_device(Signal::nmos(gate, power), &mut result);
@@ -94,13 +94,12 @@ impl<B: BitSet> Pos<B> {
             self.add_as_free(output, result);
 
             //merge with other frees
-            for &other in &self.free_signals {
-                if self.free_signals.contains(&other) {
+            for (&other, &free) in &self.built_signals {
+                if free {
                     if let Some(combined) = Signal::connect(output, other) {
                         let mut next = self.clone();
 
-                        assert!(next.common_cands.remove(&other));
-                        assert!(next.free_signals.remove(&other));
+                        assert!(next.built_signals.remove(&other).is_some());
                         next.add_as_free(combined, result);
                     }
                 }
@@ -111,10 +110,9 @@ impl<B: BitSet> Pos<B> {
     fn add_as_free(&self, new: Signal<B>, result: &mut Vec<Pos<B>>) {
         let start = Instant::now();
 
-        if !self.free_signals.contains(&new) {
+        if self.built_signals.get(&new) != Some(&true) {
             let mut next = self.clone_for_next();
-            next.free_signals.insert(new);
-            next.common_cands.insert(new);
+            next.built_signals.insert(new, true);
             result.push(next);
         }
 
@@ -146,18 +144,16 @@ pub fn main_pathfind<B: BitSet>(query: &Query<B>, max_gates: usize) -> Option<us
 
         power_cands: query.power.iter().copied().collect(),
         gate_cands: query.inputs.iter().copied().collect(),
-        common_cands: Default::default(),
-
-        free_signals: Default::default(),
+        built_signals: Default::default(),
     };
 
     let done = |p: &Pos<B>| -> bool {
         let start = Instant::now();
         let result = query.outputs.iter().all(|cs|
             if cs.care == !ignore_mask {
-                p.common_cands.contains(&cs.signal)
+                p.built_signals.get(&cs.signal).is_some()
             } else {
-                p.common_cands.iter().any(|&p| cs.matches(p))
+                p.built_signals.keys().any(|&p| cs.matches(p))
             }
         );
         let end = Instant::now();
@@ -165,17 +161,20 @@ pub fn main_pathfind<B: BitSet>(query: &Query<B>, max_gates: usize) -> Option<us
         result
     };
 
+    //TODO try to write our own bfs
     let result = bfs(&start, Pos::successors, done);
 
-    match &result {
+    let length = match &result {
         None => {
-            println!("No solution found")
+            println!("No solution found");
+            None
         }
         Some(solution) => {
             println!("Found solution, device count: {}", solution.len() - 1);
             println!("{}", solution.iter().map(|p| format!("{:?}", p)).join("\n"));
+            Some(solution.len() - 1)
         }
-    }
+    };
 
     println!("SUCCESSORS_TIME: {:?}", unsafe { SUCCESSOR_TIME });
     println!("DONE_TIME: {:?}", unsafe { DONE_TIME });
@@ -183,5 +182,5 @@ pub fn main_pathfind<B: BitSet>(query: &Query<B>, max_gates: usize) -> Option<us
     println!("CLONE_FOR_NEXT_TIME: {:?}", unsafe { CLONE_FOR_NEXT_TIME });
     println!("CLONE_TIME: {:?}", unsafe { CLONE_TIME });
 
-    result.map(|v| v.len() - 1)
+    length
 }

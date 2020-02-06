@@ -1,4 +1,5 @@
 #![allow(dead_code)]
+#![feature(const_fn)]
 
 use std::time::Instant;
 
@@ -16,7 +17,7 @@ mod pathfind;
 
 fn main() {
     //3 input NAND
-    /*let query: Query<u8> = Query {
+    let query: Query<u8> = Query {
         power: &[
             Signal::from_str("1111_1111"), //Vcc
             Signal::from_str("0000_0000"), //Gnd
@@ -32,10 +33,10 @@ fn main() {
                 0b1111_1111,
             ),
         ],
-    };*/
+    };
 
     //inverting/non-inverting buffer
-    let query: Query<u8> = Query {
+    /*let query: Query<u8> = Query {
         power: &[
             Signal::from_str("1111"), //Vcc
             Signal::from_str("0000"), //Gnd
@@ -50,7 +51,7 @@ fn main() {
                 0b1111,
             ),
         ],
-    };
+    };*/
 
     //simple buffer gate
     /*let query: Query<u8> = Query {

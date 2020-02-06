@@ -181,7 +181,7 @@ pub struct CareSignal<B: BitSet> {
 }
 
 impl<B: BitSet> CareSignal<B> {
-    pub fn new(signal: Signal<B>, care: B) -> CareSignal<B> {
+    pub const fn new(signal: Signal<B>, care: B) -> CareSignal<B> {
         CareSignal { signal, care }
     }
 
@@ -192,6 +192,7 @@ impl<B: BitSet> CareSignal<B> {
     }
 }
 
+#[derive(Debug)]
 pub struct Query<'a, B: BitSet> {
     //signals allowed to be used as drains
     pub power: &'a [Signal<B>],

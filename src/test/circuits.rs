@@ -142,7 +142,8 @@ fn test_nand3() {
     assert_eq!(main_pathfind(&query, 8), Some(6));
 }
 
-#[test]
+//too slow, never finishes at all
+/*#[test]
 #[ignore]
 fn test_xor2() {
     let query = Query::<u8> {
@@ -158,4 +159,4 @@ fn test_xor2() {
     };
 
     assert_eq!(main_pathfind(&query, 10), Some(6));
-}
+}*/

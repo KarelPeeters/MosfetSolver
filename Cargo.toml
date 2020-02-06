@@ -13,6 +13,7 @@ pathfinding = "2.0.3"
 itertools = "0.8.2"
 #more-asserts = "0.2.1"
 num-traits = "0.2.11"
+lazy_static = "1.4.0"
 
 [profile.release]
 opt-level=3
