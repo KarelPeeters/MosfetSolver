@@ -7,6 +7,8 @@ use itertools::Itertools;
 use pathfinding::prelude::bfs;
 
 use crate::signal::{BitSet, Query, Signal};
+use std::hash::{Hash, Hasher};
+use std::cmp::Ordering;
 
 static mut SUCCESSOR_TIME: Duration = Duration::from_secs(0);
 static mut DONE_TIME: Duration = Duration::from_secs(0);
@@ -27,25 +29,46 @@ struct Device<B: BitSet> {
     power: Signal<B>,
 }
 
-#[derive(Eq, PartialEq, Hash, Debug, Ord, PartialOrd)]
+#[derive(Eq, Debug)]
 //TODO
 struct Pos<B: BitSet> {
-    //TODO remove with new bfs algorithm
-    gates_left: usize,
-
     //TODO exclude these from hash, they're always going to be the same anyway
     //  is it possible to remove these from Pos entirely?
     power_cands: Vec<Signal<B>>,
     gate_cands: Vec<Signal<B>>,
 
-    //TODO try different hash types, and just manually implement hash
+    //TODO try different map types, and just manually implement hash
     built_signals: BTreeMap<Signal<B>, bool>,
 }
+
+impl<B: BitSet> Ord for Pos<B> {
+    fn cmp(&self, other: &Self) -> Ordering {
+        self.built_signals.cmp(&other.built_signals)
+    }
+}
+
+impl<B: BitSet> PartialOrd for Pos<B> {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        self.built_signals.partial_cmp(&other.built_signals)
+    }
+}
+
+impl<B: BitSet> PartialEq for Pos<B> {
+    fn eq(&self, other: &Self) -> bool {
+        self.built_signals.eq(&other.built_signals)
+    }
+}
+
+impl<B: BitSet> Hash for Pos<B> {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.built_signals.hash(state);
+    }
+}
+
 impl<B: BitSet> Clone for Pos<B> {
     fn clone(&self) -> Self {
         let start = Instant::now();
         let result = Pos {
-            gates_left: self.gates_left,
             power_cands: self.power_cands.clone(),
             gate_cands: self.gate_cands.clone(),
             built_signals: self.built_signals.clone(),
@@ -58,24 +81,10 @@ impl<B: BitSet> Clone for Pos<B> {
 }
 
 impl<B: BitSet> Pos<B> {
-    fn clone_for_next(&self) -> Pos<B> {
-        let start = Instant::now();
-
-        let mut result = self.clone();
-        result.gates_left -= 1;
-
-        let end = Instant::now();
-        unsafe { CLONE_FOR_NEXT_TIME += end - start; }
-
-        result
-    }
-
     //TODO maybe stop cloning here and mutate instead now that we get self by value anyways
     fn successors(self) -> Vec<Pos<B>> {
         let start = Instant::now();
         let mut result = Vec::new();
-
-        if self.gates_left == 0 { return result; };
 
         for &power in self.power_cands.iter().chain(self.built_signals.keys()) {
             for &gate in self.gate_cands.iter().chain(self.built_signals.keys()) {
@@ -119,7 +128,7 @@ impl<B: BitSet> Pos<B> {
         let start = Instant::now();
 
         if self.built_signals.get(&new) != Some(&true) {
-            let mut next = self.clone_for_next();
+            let mut next = self.clone();
             next.built_signals.insert(new, true);
             result.push(next);
         }
@@ -148,8 +157,6 @@ pub fn main_pathfind<B: BitSet>(query: &Query<B>, max_gates: usize) -> Option<us
 //    return;
 
     let start = Pos {
-        gates_left: max_gates,
-
         power_cands: query.power.iter().copied().collect(),
         gate_cands: query.inputs.iter().copied().collect(),
         built_signals: Default::default(),
@@ -169,8 +176,8 @@ pub fn main_pathfind<B: BitSet>(query: &Query<B>, max_gates: usize) -> Option<us
         result
     };
 
-    //TODO try to write our own bfs
-    let result = bfs2(&start, Pos::successors, done);
+    //TODO put in max_gates
+    let result = bfs2(&start, Pos::successors, done, 5);
 
     let length = match &result {
         None => {
@@ -202,16 +209,17 @@ fn bfs2<
     B: BitSet,
     //TODO change signature to consuming Pos<B>, but match bfs signature for now
     //  check if it's faster
+    //TODO make this return some kind of iterator?
     FN: FnMut(Pos<B>) -> Vec<Pos<B>>,
     FS: FnMut(&Pos<B>) -> bool,
->(start: &Pos<B>, mut successors: FN, mut success: FS) -> Option<(usize, Pos<B>)> {
+>(start: &Pos<B>, mut successors: FN, mut success: FS, max_depth: usize) -> Option<(usize, Pos<B>)> {
     let mut curr: HashSet<Pos<B>> = Default::default();
     curr.insert(start.clone());
 
     //TODO break this loop based on index, but match signature to bfs for now
     //  check if it's faster
     //TODO remove upper bound
-    for i in 0..5 {
+    for i in 0..max_depth {
         println!("Starting depth {}", i);
 
         let mut next: HashSet<Pos<B>> = Default::default();
@@ -225,7 +233,10 @@ fn bfs2<
 //                if success(s) { return Some((i, pos)); }
             }
 
-            next.extend(succ);
+            //TODO imrpove, this is akward
+            if i != max_depth + 1 {
+                next.extend(succ);
+            }
         }
 
         if next.is_empty() { return None; }
