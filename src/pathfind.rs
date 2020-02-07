@@ -185,7 +185,7 @@ pub fn main_pathfind<B: BitSet>(query: &Query<B>, max_gates: usize) -> Option<us
     };
 
     //TODO put in max_gates
-    let result = bfs2(&start, done, max_gates - 1);
+    let result = bfs2(&start, done, max_gates );
 
     let length = match &result {
         None => {
@@ -198,9 +198,10 @@ pub fn main_pathfind<B: BitSet>(query: &Query<B>, max_gates: usize) -> Option<us
 //            Some(solution.len() - 1)
 //        }
         Some((i, end)) => {
+            let i = i+1;
             println!("Found solution, device count: {}", i);
             println!("end: {:?}", end);
-            Some(*i)
+            Some(i)
         }
     };
 
