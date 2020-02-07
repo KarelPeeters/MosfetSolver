@@ -1,5 +1,6 @@
 #![allow(dead_code)]
 #![feature(const_fn)]
+#![feature(try_trait)]
 
 use std::time::Instant;
 
@@ -91,7 +92,8 @@ fn main() {
 
 //    main_custom(&query, 6);
 
-    main_pathfind(&query, 10);
+    //TODO read blogpost about compressing bfs
+    main_pathfind(&query, 6);
 
     let end = Instant::now();
     println!("Took {}s", (end - start).as_secs_f32());
