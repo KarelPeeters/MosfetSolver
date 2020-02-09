@@ -40,7 +40,9 @@ struct Pos<B: BitSet> {
     gate_cands: Vec<Signal<B>>,
 
     //TODO try different map types, and just manually implement hash
-    built_signals: BTreeMap<Signal<B>, bool>,
+    //TODO maybe try to represent this with a sorted vec with the max_gates size perfectly allocated?
+    //  maybe even a slice is possible <- no, not dynamic enough
+    built_signals: Vec<(Signal<B>, bool)>,
 }
 
 impl<B: BitSet> Ord for Pos<B> {
@@ -88,12 +90,16 @@ impl<B: BitSet> Pos<B> {
     fn successors<R, F: FnMut(Pos<B>) -> Result<(), R>>(self, mut f: F) -> Result<(), R> {
         let start = Instant::now();
 
-        for &power in self.power_cands.iter().chain(self.built_signals.keys()) {
-            for &gate in self.gate_cands.iter().chain(self.built_signals.keys()) {
+        for &power in self.power_cands.iter().chain(self.built_signals.iter().map(|p| &p.0)) {
+            for &gate in self.gate_cands.iter().chain(self.built_signals.iter().map(|p| &p.0)) {
                 let mut next = self.clone();
 
-                next.built_signals.entry(power).and_modify(|v| *v = false);
-                next.built_signals.entry(gate).and_modify(|v| *v = false);
+                if let Some(i) = next.built_signals.iter().position(|p| p.0 == power) {
+                    next.built_signals[i].1 = false;
+                }
+                if let Some(i) = next.built_signals.iter().position(|p| p.0 == gate) {
+                    next.built_signals[i].1 = false;
+                }
 
                 next.add_device(Signal::pmos(gate, power), &mut f)?;
                 next.add_device(Signal::nmos(gate, power), &mut f)?;
@@ -112,12 +118,12 @@ impl<B: BitSet> Pos<B> {
             self.add_as_free(output, &mut f)?;
 
             //merge with other frees
-            for (&other, &free) in &self.built_signals {
-                if free {
-                    if let Some(combined) = Signal::connect(output, other) {
+            for (i, (other, free)) in self.built_signals.iter().enumerate() {
+                if *free {
+                    if let Some(combined) = Signal::connect(output, *other) {
                         let mut next = self.clone();
 
-                        assert!(next.built_signals.remove(&other).is_some());
+                        next.built_signals.remove(i);
                         next.add_as_free(combined, &mut f)?;
                     }
                 }
@@ -131,10 +137,23 @@ impl<B: BitSet> Pos<B> {
     fn add_as_free<R, F: FnMut(Pos<B>) -> Result<(), R>>(&self, new: Signal<B>, mut f: F) -> Result<(), R> {
         let start = Instant::now();
 
-        if self.built_signals.get(&new) != Some(&true) {
+        let i = self.built_signals.iter().position(|p| p.0 >= new).unwrap_or(0);
+        if self.built_signals.get(i).map(|p| p.0!=new).unwrap_or(true) {
             let mut next = self.clone();
-            next.built_signals.insert(new, true);
+
+            next.built_signals.insert(i, (new, true));
 //            println!("Before call");
+
+            //TODO debug why this "vec full linear" solution doesn't work and uses lots of memory
+            //   the order is probably not entirely correct, so duplicates aren't detected
+            //TODO replace by is_sorted assert after debugging
+            debug_assert_eq!({
+
+                let mut clone = next.built_signals.clone();
+                clone.sort_by_key(|p| p.0);
+                clone
+            }, next.built_signals);
+
             f(next)?;
 //            println!("After call");
         }
@@ -146,7 +165,7 @@ impl<B: BitSet> Pos<B> {
     }
 }
 
-pub fn main_pathfind<B: BitSet>(query: &Query<B>, max_gates: usize) -> Option<usize> {
+pub fn main_pathfind<B: BitSet>(query: &Query<B>, max_devices: usize) -> Option<usize> {
     query.check();
 
     //to use for done check, if there are no outputs the mask doesn't matter
@@ -173,19 +192,19 @@ pub fn main_pathfind<B: BitSet>(query: &Query<B>, max_gates: usize) -> Option<us
     let done = |p: &Pos<B>| -> bool {
         let start = Instant::now();
         let result = query.outputs.iter().all(|cs|
-            if cs.care == !ignore_mask {
-                p.built_signals.get(&cs.signal).is_some()
-            } else {
-                p.built_signals.keys().any(|&p| cs.matches(p))
-            }
+//            if cs.care == !ignore_mask {
+//                p.built_signals.iter().any(cs.signal, |p| p.0).is_ok()
+//            } else {
+                p.built_signals.iter().any(|&p| cs.matches(p.0))
+//            }
         );
         let end = Instant::now();
         unsafe { DONE_TIME += end - start; }
         result
     };
 
-    //TODO put in max_gates
-    let result = bfs2(&start, done, max_gates );
+    //TODO put in max_devices
+    let result = bfs2(&start, done, max_devices);
 
     let length = match &result {
         None => {
@@ -240,8 +259,10 @@ fn bfs2<
 
             let x = pos.successors(|succ| {
                 if success(&succ) {
-//                    println!("success");
-                    Err((i, succ))
+                    println!("success");
+//                    Err((i, succ))
+                    //TODO change this back, but this is for comparison
+                    Ok(())
                 } else {
 //                    println!("no success, inserting");
                     next.insert(succ);
