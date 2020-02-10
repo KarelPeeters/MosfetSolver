@@ -1,5 +1,6 @@
-use crate::pathfind::main_pathfind;
+
 use crate::signal::{CareSignal, Query, Signal};
+use crate::solve;
 
 #[test]
 fn test_single_mos() {
@@ -9,7 +10,7 @@ fn test_single_mos() {
         outputs: &[CareSignal::new(Signal::from_str("1Z"), 0b11)],
     };
 
-    assert_eq!(main_pathfind(&query, 8), Some(1));
+    assert_eq!(solve(&query, 8), Some(1));
 
     let query = Query::<u8> {
         power: &[Signal::from_str("11"), Signal::from_str("00")],
@@ -17,7 +18,7 @@ fn test_single_mos() {
         outputs: &[CareSignal::new(Signal::from_str("Z0"), 0b11)],
     };
 
-    assert_eq!(main_pathfind(&query, 8), Some(1));
+    assert_eq!(solve(&query, 8), Some(1));
 }
 
 #[test]
@@ -28,7 +29,7 @@ fn test_not() {
         outputs: &[CareSignal::new(Signal::from_str("10"), 0b11)],
     };
 
-    assert_eq!(main_pathfind(&query, 8), Some(2));
+    assert_eq!(solve(&query, 8), Some(2));
 }
 
 #[test]
@@ -39,7 +40,7 @@ fn test_buffer() {
         outputs: &[CareSignal::new(Signal::from_str("01"), 0b11)],
     };
 
-    assert_eq!(main_pathfind(&query, 8), Some(4));
+    assert_eq!(solve(&query, 8), Some(4));
 }
 
 #[test]
@@ -50,7 +51,7 @@ fn test_buffer_inv_given() {
         outputs: &[CareSignal::new(Signal::from_str("01"), 0b11)],
     };
 
-    assert_eq!(main_pathfind(&query, 8), Some(2));
+    assert_eq!(solve(&query, 8), Some(2));
 }
 
 #[test]
@@ -67,7 +68,7 @@ fn test_nand2() {
         )],
     };
 
-    assert_eq!(main_pathfind(&query, 8), Some(4));
+    assert_eq!(solve(&query, 8), Some(4));
 }
 
 #[test]
@@ -84,7 +85,7 @@ fn test_nor2() {
         )],
     };
 
-    assert_eq!(main_pathfind(&query, 8), Some(4));
+    assert_eq!(solve(&query, 8), Some(4));
 }
 
 #[test]
@@ -102,7 +103,7 @@ fn test_and2() {
         )],
     };
 
-    assert_eq!(main_pathfind(&query, 8), Some(6));
+    assert_eq!(solve(&query, 8), Some(6));
 }
 
 #[test]
@@ -120,7 +121,7 @@ fn test_tristate_buffer() {
         )],
     };
 
-    assert_eq!(main_pathfind(&query, 8), Some(6));
+    assert_eq!(solve(&query, 8), Some(6));
 }
 
 #[test]
@@ -139,7 +140,7 @@ fn test_nand3() {
         )],
     };
 
-    assert_eq!(main_pathfind(&query, 8), Some(6));
+    assert_eq!(solve(&query, 8), Some(6));
 }
 
 //too slow, never finishes at all
@@ -158,5 +159,5 @@ fn test_xor2() {
         )],
     };
 
-    assert_eq!(main_pathfind(&query, 10), Some(6));
+    assert_eq!(solve(&query, 10), Some(6));
 }*/

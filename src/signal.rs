@@ -214,6 +214,6 @@ impl<'a, B: BitSet> Query<'a, B> {
             "All signals must have the same ignored mask"
         );
 
-        //TODO check that ouput cares are a subset of !ignored_mask()
+        //TODO check that output cares are a subset of !ignored_mask()
     }
 }

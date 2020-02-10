@@ -1,0 +1,114 @@
+C:/Users/Karel/.cargo/bin/cargo.exe run --color=always --package hdl --bin hdl --release
+   Compiling hdl v0.1.0 (C:\Documents\Hardware\hdl)
+warning: unused import: `crate::solvers::bfs::solve_bfs`
+ --> src\main.rs:9:5
+  |
+9 | use crate::solvers::bfs::solve_bfs;
+  |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  |
+  = note: `#[warn(unused_imports)]` on by default
+
+warning: unused imports: `BTreeSet`, `HashMap`
+ --> src\data\undo_map.rs:1:34
+  |
+1 | use std::collections::{BTreeMap, BTreeSet, HashMap};
+  |                                  ^^^^^^^^  ^^^^^^^
+
+warning: unused import: `itertools::Format`
+ --> src\data\undo_map.rs:5:5
+  |
+5 | use itertools::Format;
+  |     ^^^^^^^^^^^^^^^^^
+
+warning: unused imports: `BTreeMap`, `BTreeSet`
+ --> src\solvers\bfs.rs:2:24
+  |
+2 | use std::collections::{BTreeMap, BTreeSet, HashSet};
+  |                        ^^^^^^^^  ^^^^^^^^
+
+warning: unused import: `std::mem::swap`
+ --> src\solvers\bfs.rs:4:5
+  |
+4 | use std::mem::swap;
+  |     ^^^^^^^^^^^^^^
+
+warning: unused import: `fnv::FnvHashSet`
+ --> src\solvers\bfs.rs:7:5
+  |
+7 | use fnv::FnvHashSet;
+  |     ^^^^^^^^^^^^^^^
+
+warning: unused import: `itertools::Itertools`
+ --> src\solvers\bfs.rs:8:5
+  |
+8 | use itertools::Itertools;
+  |     ^^^^^^^^^^^^^^^^^^^^
+
+warning: unused import: `pathfinding::prelude::bfs`
+ --> src\solvers\bfs.rs:9:5
+  |
+9 | use pathfinding::prelude::bfs;
+  |     ^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: unused import: `std::error::Error`
+  --> src\solvers\bfs.rs:12:5
+   |
+12 | use std::error::Error;
+   |     ^^^^^^^^^^^^^^^^^
+
+warning: unused import: `std::ops::Try`
+  --> src\solvers\bfs.rs:13:5
+   |
+13 | use std::ops::Try;
+   |     ^^^^^^^^^^^^^
+
+warning: unused variable: `ignore_mask`
+   --> src\solvers\bfs.rs:172:9
+    |
+172 |     let ignore_mask = query.outputs
+    |         ^^^^^^^^^^^ help: consider prefixing with an underscore: `_ignore_mask`
+    |
+    = note: `#[warn(unused_variables)]` on by default
+
+    Finished release [optimized] target(s) in 1.24s
+     Running `target\release\hdl.exe`
+Target output: CareSignal { signal: [0110], care: 15 }
+Target output: CareSignal {
+    signal: Signal {
+        low: 249,
+        high: 246,
+        strong: 255,
+    },
+    care: 15,
+}
+given inputs: [[0011], [0101]]
+Trying depth 0
+Saw 0 distinct hashes
+Trying depth 1
+Saw 1 distinct hashes
+Trying depth 2
+Saw 9 distinct hashes
+Trying depth 3
+Saw 77 distinct hashes
+Trying depth 4
+Saw 539 distinct hashes
+Trying depth 5
+Saw 3546 distinct hashes
+Trying depth 6
+Saw 22340 distinct hashes
+Trying depth 7
+Saw 133550 distinct hashes
+Trying depth 8
+Saw 769082 distinct hashes
+Trying depth 9
+Saw 4355280 distinct hashes
+Trying depth 10
+Saw 24377563 distinct hashes
+Trying depth 11
+Saw 136548186 distinct hashes
+Trying depth 12
+...
+
+terminated manually
+after running for about 2h
+ram: 2.3GB

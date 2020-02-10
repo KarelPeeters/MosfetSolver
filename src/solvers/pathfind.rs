@@ -165,7 +165,7 @@ impl<B: BitSet> Pos<B> {
     }
 }
 
-pub fn main_pathfind<B: BitSet>(query: &Query<B>, max_devices: usize) -> Option<usize> {
+pub fn solve_bfs<B: BitSet>(query: &Query<B>, max_devices: usize) -> Option<usize> {
     query.check();
 
     //to use for done check, if there are no outputs the mask doesn't matter
@@ -240,7 +240,7 @@ fn bfs2<
     //TODO make this return some kind of iterator?
     FS: FnMut(&Pos<B>) -> bool,
 >(start: &Pos<B>, mut success: FS, max_depth: usize) -> Option<(usize, Pos<B>)> {
-    let mut all: HashSet<Pos<B>> = Default::default();
+//    let mut all: HashSet<Pos<B>> = Default::default();
 
     let mut curr: HashSet<Pos<B>> = Default::default();
     curr.insert(start.clone());
@@ -261,7 +261,6 @@ fn bfs2<
                 if success(&succ) {
                     println!("success");
 //                    Err((i, succ))
-                    //TODO change this back, but this is for comparison
                     Ok(())
                 } else {
 //                    println!("no success, inserting");
