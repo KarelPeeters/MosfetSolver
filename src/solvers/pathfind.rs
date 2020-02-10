@@ -1,22 +1,16 @@
 use std::cmp::Ordering;
-use std::collections::{BTreeMap, BTreeSet, HashSet};
+use std::collections::{HashSet};
 use std::hash::{Hash, Hasher};
-use std::mem::swap;
-use std::time::{Duration, Instant};
 
-use fnv::FnvHashSet;
-use itertools::Itertools;
-use pathfinding::prelude::bfs;
+
+
+
+
 
 use crate::signal::{BitSet, Query, Signal};
-use std::error::Error;
-use std::ops::Try;
+use pathfinding::directed::iddfs::iddfs;
+use itertools::Itertools;
 
-static mut SUCCESSOR_TIME: Duration = Duration::from_secs(0);
-static mut DONE_TIME: Duration = Duration::from_secs(0);
-static mut ADD_AS_FREE_TIME: Duration = Duration::from_secs(0);
-static mut CLONE_FOR_NEXT_TIME: Duration = Duration::from_secs(0);
-static mut CLONE_TIME: Duration = Duration::from_secs(0);
 
 #[derive(Eq, PartialEq, Hash, Copy, Clone, Debug)]
 enum Kind {
@@ -71,27 +65,25 @@ impl<B: BitSet> Hash for Pos<B> {
 
 impl<B: BitSet> Clone for Pos<B> {
     fn clone(&self) -> Self {
-        let start = Instant::now();
-        let result = Pos {
+        Pos {
             power_cands: self.power_cands.clone(),
             gate_cands: self.gate_cands.clone(),
             built_signals: self.built_signals.clone(),
-        };
-
-        let end = Instant::now();
-        unsafe { CLONE_TIME += end - start }
-        result
+        }
     }
 }
 
 impl<B: BitSet> Pos<B> {
     //TODO maybe stop cloning here and mutate instead now that we get self by value anyways
     //TODO change this option to be a try instead
-    fn successors<R, F: FnMut(Pos<B>) -> Result<(), R>>(self, mut f: F) -> Result<(), R> {
-        let start = Instant::now();
-
+    fn successors<R, F: FnMut(Pos<B>) -> Result<(), R>>(&self, mut f: F) -> Result<(), R> {
         for &power in self.power_cands.iter().chain(self.built_signals.iter().map(|p| &p.0)) {
             for &gate in self.gate_cands.iter().chain(self.built_signals.iter().map(|p| &p.0)) {
+                let pmos = Signal::pmos(gate, power);
+                let nmos = Signal::nmos(gate, power);
+
+                if pmos.is_none() && nmos.is_none() { continue; }
+
                 let mut next = self.clone();
 
                 if let Some(i) = next.built_signals.iter().position(|p| p.0 == power) {
@@ -105,8 +97,6 @@ impl<B: BitSet> Pos<B> {
                 next.add_device(Signal::nmos(gate, power), &mut f)?;
             }
         }
-        let end = Instant::now();
-        unsafe { SUCCESSOR_TIME += end - start; }
 
         Ok(())
     }
@@ -135,8 +125,6 @@ impl<B: BitSet> Pos<B> {
 
     //TODO this is the single place where cloning is ok, it should be removed from everything else
     fn add_as_free<R, F: FnMut(Pos<B>) -> Result<(), R>>(&self, new: Signal<B>, mut f: F) -> Result<(), R> {
-        let start = Instant::now();
-
         let i = self.built_signals.iter().position(|p| p.0 >= new).unwrap_or(0);
         if self.built_signals.get(i).map(|p| p.0!=new).unwrap_or(true) {
             let mut next = self.clone();
@@ -158,9 +146,6 @@ impl<B: BitSet> Pos<B> {
 //            println!("After call");
         }
 
-        let end = Instant::now();
-        unsafe { ADD_AS_FREE_TIME += end - start; }
-
         Ok(())
     }
 }
@@ -169,8 +154,8 @@ pub fn solve_bfs<B: BitSet>(query: &Query<B>, max_devices: usize) -> Option<usiz
     query.check();
 
     //to use for done check, if there are no outputs the mask doesn't matter
-    let ignore_mask = query.outputs
-        .first().map_or(B::zero(), |cs| cs.signal.ignored_mask());
+    /*let ignore_mask = query.outputs
+        .first().map_or(B::zero(), |cs| cs.signal.ignored_mask());*/
 
     /*let pos: Pos<u8> = Pos {
         power_signals: vec![Signal::from_str("1Z1Z"), Signal::from_str("1111"), Signal::from_str("0000")].iter().copied().collect(),
@@ -190,7 +175,6 @@ pub fn solve_bfs<B: BitSet>(query: &Query<B>, max_devices: usize) -> Option<usiz
     };
 
     let done = |p: &Pos<B>| -> bool {
-        let start = Instant::now();
         let result = query.outputs.iter().all(|cs|
 //            if cs.care == !ignore_mask {
 //                p.built_signals.iter().any(cs.signal, |p| p.0).is_ok()
@@ -198,12 +182,15 @@ pub fn solve_bfs<B: BitSet>(query: &Query<B>, max_devices: usize) -> Option<usiz
                 p.built_signals.iter().any(|&p| cs.matches(p.0))
 //            }
         );
-        let end = Instant::now();
-        unsafe { DONE_TIME += end - start; }
         result
     };
 
-    //TODO put in max_devices
+//    let result = iddfs(start, |pos| {
+//        println!("Looking at {:?}", pos);
+//        let mut vec = Vec::new();
+//        let _ = pos.successors::<(), _>(|next| { vec.push(next); Ok(()) });
+//        vec
+//    }, done);
     let result = bfs2(&start, done, max_devices);
 
     let length = match &result {
@@ -223,12 +210,6 @@ pub fn solve_bfs<B: BitSet>(query: &Query<B>, max_devices: usize) -> Option<usiz
             Some(i)
         }
     };
-
-    println!("SUCCESSORS_TIME: {:?}", unsafe { SUCCESSOR_TIME });
-    println!("DONE_TIME: {:?}", unsafe { DONE_TIME });
-    println!("ADD_AS_FREE_TIME: {:?}", unsafe { ADD_AS_FREE_TIME });
-    println!("CLONE_FOR_NEXT_TIME: {:?}", unsafe { CLONE_FOR_NEXT_TIME });
-    println!("CLONE_TIME: {:?}", unsafe { CLONE_TIME });
 
     length
 }
@@ -260,8 +241,8 @@ fn bfs2<
             let x = pos.successors(|succ| {
                 if success(&succ) {
                     println!("success");
-//                    Err((i, succ))
-                    Ok(())
+                    Err((i, succ))
+//                    Ok(())
                 } else {
 //                    println!("no success, inserting");
                     next.insert(succ);

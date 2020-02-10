@@ -19,7 +19,7 @@ mod solvers;
 
 fn main() {
     //3 input NAND
-    /*let query: Query<u8> = Query {
+    let query: Query<u8> = Query {
         power: &[
             Signal::from_str("1111_1111"), //Vcc
             Signal::from_str("0000_0000"), //Gnd
@@ -35,7 +35,7 @@ fn main() {
                 0b1111_1111,
             ),
         ],
-    };*/
+    };
 
     //inverting/non-inverting buffer
     /*let query: Query<u8> = Query {
@@ -98,14 +98,14 @@ fn main() {
     };*/
 
     //half adder
-    let query = Query::<u8> {
+    /*let query = Query::<u8> {
         power: &[Signal::from_str("1111"), Signal::from_str("0000")],
         inputs: &[Signal::from_str("0011"), Signal::from_str("0101")],
         outputs: &[
             CareSignal::new(Signal::from_str("0110"), 0b1111),
             CareSignal::new(Signal::from_str("0001"), 0b1111),
         ],
-    };
+    };*/
 
     println!("Target output: {:?}", query.outputs[0]);
     println!("Target output: {:#?}", query.outputs[0]);
@@ -116,7 +116,7 @@ fn main() {
 //    main_custom(&query, 6);
 
     //TODO read blogpost about compressing bfs
-    let result = solve(&query, 15);
+    let result = solve(&query, 10);
     println!("Solved with result {:?}", result);
 
     let end = Instant::now();
@@ -125,5 +125,5 @@ fn main() {
 
 fn solve<B: BitSet>(query: &Query<B>, max_devices: usize) -> Option<usize> {
     query.check();
-    solve_dfs(query, max_devices)
+    solve_bfs(query, max_devices)
 }
