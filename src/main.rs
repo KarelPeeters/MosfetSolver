@@ -73,7 +73,7 @@ fn main() {
     };*/
 
     //xor2
-    /*let query = Query::<u8> {
+    let query = Query::<u8> {
         power: &[Signal::from_str("1111"), Signal::from_str("0000")],
         inputs: &[
             Signal::from_str("0011"),
@@ -83,7 +83,7 @@ fn main() {
             Signal::from_str("0110"),
             0b1111,
         )],
-    };*/
+    };
 
     //not
     /*let query = Query::<u8> {
@@ -125,5 +125,5 @@ fn main() {
 
 fn solve<B: BitSet>(query: &Query<B>, max_devices: usize) -> Option<usize> {
     query.check();
-    solve_bfs(query, max_devices)
+    solve_dfs(query, max_devices)
 }

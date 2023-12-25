@@ -18,3 +18,4 @@ immutable-map = "0.1.2"
 
 [profile.release]
 opt-level=3
+debug = true

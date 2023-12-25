@@ -175,14 +175,13 @@ pub fn solve_bfs<B: BitSet>(query: &Query<B>, max_devices: usize) -> Option<usiz
     };
 
     let done = |p: &Pos<B>| -> bool {
-        let result = query.outputs.iter().all(|cs|
+        query.outputs.iter().all(|cs|
 //            if cs.care == !ignore_mask {
 //                p.built_signals.iter().any(cs.signal, |p| p.0).is_ok()
 //            } else {
                 p.built_signals.iter().any(|&p| cs.matches(p.0))
 //            }
-        );
-        result
+        )
     };
 
 //    let result = iddfs(start, |pos| {

@@ -18,7 +18,7 @@ struct SharedState<'a, B: BitSet> {
 
 //TODO try entire implementation with more & instead of copying, mostly for Signals
 impl<'a, B: BitSet> SharedState<'a, B> {
-    fn is_done(&self, built_signals: &UndoMap<Signal<B>, bool>, depth: usize) -> Result<(), usize> {
+    fn is_done(&self, built_signals: &UndoMap<Signal<B>, bool>, left: usize) -> Result<(), usize> {
         //TODO optimize using care mask and contains here
 
         //check care bits here again!
@@ -30,7 +30,7 @@ impl<'a, B: BitSet> SharedState<'a, B> {
         }*/
 
         if self.outputs.iter().all(|cs| built_signals.contains_key(&cs.signal)) {
-            Err(depth)
+            Err(left)
         } else {
             Ok(())
         }
@@ -126,6 +126,7 @@ pub fn solve_dfs<B: BitSet>(query: &Query<B>, max_devices: usize) -> Option<usiz
     };
 
     //iterative deepening
+    //TODO keep the old set of states around? not really worth it, it's just
     for depth in 0..=max_devices {
         println!("Trying depth {}", depth);
 //        shared.seen.clear();
